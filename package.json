@@ -1,6 +1,6 @@
 {
   "name": "memory-dedup",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Semantic deduplication of agent memory entries",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

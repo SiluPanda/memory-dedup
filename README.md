@@ -3,6 +3,7 @@
 Semantic deduplication of agent memory entries using embedding-based cosine similarity.
 
 [![npm version](https://img.shields.io/npm/v/memory-dedup.svg)](https://www.npmjs.com/package/memory-dedup)
+[![npm downloads](https://img.shields.io/npm/dt/memory-dedup.svg)](https://www.npmjs.com/package/memory-dedup)
 [![license](https://img.shields.io/npm/l/memory-dedup.svg)](https://github.com/SiluPanda/memory-dedup/blob/master/LICENSE)
 [![node](https://img.shields.io/node/v/memory-dedup.svg)](https://nodejs.org)
 
