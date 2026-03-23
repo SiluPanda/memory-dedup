@@ -16,7 +16,14 @@ export function createDeduplicator(options: DedupOptions): MemoryDedup {
   const relatedThreshold = options.relatedThreshold ?? 0.75;
   const mergePolicy = options.mergePolicy ?? 'keep-newest';
 
-  const store = new InMemoryStore();
+  if (!(relatedThreshold < threshold && threshold < exactThreshold)) {
+    throw new Error(
+      `Thresholds must satisfy relatedThreshold < threshold < exactThreshold, ` +
+      `got ${relatedThreshold} < ${threshold} < ${exactThreshold}`
+    );
+  }
+
+  const store = options.store ?? new InMemoryStore();
   const emitter = new EventEmitter();
 
   // Counters for stats
@@ -166,6 +173,11 @@ export function createDeduplicator(options: DedupOptions): MemoryDedup {
     } else {
       // Survivor is the candidate or a merged variant — compute embedding
       survivorEmbedding = candidateEmbedding ?? await options.embedder(survivor.content);
+    }
+
+    // Clean up any stale hash mappings before re-adding the survivor
+    if (store.get(survivor.id)) {
+      store.remove(survivor.id);
     }
 
     const survivorNorm = normalizeText(survivor.content);
