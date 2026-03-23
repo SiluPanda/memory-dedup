@@ -254,4 +254,144 @@ describe('createDeduplicator', () => {
     expect(dedup.stats().totalChecks).toBe(0);
     expect(dedup.getEntries()).toHaveLength(0);
   });
+
+  it('merge policy keeps candidate id and evicts match', async () => {
+    const sameVec = [1, 0, 0, 0, 0];
+    const embedder = async (_text: string) => sameVec;
+
+    const dedup = createDeduplicator({
+      embedder,
+      threshold: 0.90,
+      exactThreshold: 0.98,
+      mergePolicy: 'merge',
+    });
+
+    await dedup.add(entry('old-1', 'short'));
+    const result = await dedup.add(entry('new-2', 'short but much longer version'));
+
+    expect(result.action).toBe('merged');
+    expect(result.survivorId).toBe('new-2');
+    expect(result.evictedId).toBe('old-1');
+    const entries = dedup.getEntries();
+    expect(entries).toHaveLength(1);
+    expect(entries[0].id).toBe('new-2');
+    expect(entries[0].content).toBe('short but much longer version');
+  });
+
+  it('merge policy does not leak stale hashes', async () => {
+    const sameVec = [1, 0, 0, 0, 0];
+    const embedder = vi.fn(async (_text: string) => sameVec);
+
+    const dedup = createDeduplicator({
+      embedder,
+      threshold: 0.90,
+      exactThreshold: 0.98,
+      mergePolicy: 'merge',
+    });
+
+    // Add original entry with content "alpha"
+    await dedup.add(entry('m1', 'alpha original text'));
+    // Add duplicate with longer content — merge keeps "new-m2" id
+    await dedup.add(entry('new-m2', 'alpha original text plus extra words'));
+
+    embedder.mockClear();
+
+    // Now check a new entry with the OLD content "alpha original text"
+    // This should NOT be a hash match — the old hash should have been cleaned up
+    const checkResult = await dedup.check(entry('m3', 'alpha original text'));
+    // The content differs from what's now stored, so it should go through embedding path
+    // (not the hash fast-path which would be a false positive)
+    expect(checkResult.hashMatch).toBe(false);
+  });
+
+  it('throws on invalid threshold ordering', () => {
+    const embedder = async (_text: string) => [0.1, 0.2, 0.3];
+
+    expect(() => createDeduplicator({
+      embedder,
+      threshold: 0.95,
+      exactThreshold: 0.90,  // exact < threshold → invalid
+    })).toThrow(/Thresholds must satisfy/);
+
+    expect(() => createDeduplicator({
+      embedder,
+      relatedThreshold: 0.95,
+      threshold: 0.90,  // related > threshold → invalid
+    })).toThrow(/Thresholds must satisfy/);
+  });
+
+  it('keep-highest-confidence falls back to keep-newest when confidence is equal', async () => {
+    const sameVec = [1, 0, 0, 0, 0];
+    const embedder = async (_text: string) => sameVec;
+
+    const dedup = createDeduplicator({
+      embedder,
+      threshold: 0.90,
+      exactThreshold: 0.98,
+      mergePolicy: 'keep-highest-confidence',
+    });
+
+    // Neither entry has confidence — both default to 0
+    // Fallback should keep newest (by timestamp)
+    await dedup.add(entry('old', 'some memory text', { timestamp: 100 }));
+    const result = await dedup.add(entry('new', 'some memory text rephrased', { timestamp: 200 }));
+
+    expect(result.action).toBe('merged');
+    expect(result.survivorId).toBe('new');
+    expect(result.evictedId).toBe('old');
+  });
+
+  it('keep-highest-confidence keeps higher confidence regardless of timestamp', async () => {
+    const sameVec = [1, 0, 0, 0, 0];
+    const embedder = async (_text: string) => sameVec;
+
+    const dedup = createDeduplicator({
+      embedder,
+      threshold: 0.90,
+      exactThreshold: 0.98,
+      mergePolicy: 'keep-highest-confidence',
+    });
+
+    // Old entry has higher confidence
+    await dedup.add(entry('high-conf', 'some fact', { confidence: 0.95, timestamp: 100 }));
+    const result = await dedup.add(entry('low-conf', 'same fact rephrased', { confidence: 0.5, timestamp: 200 }));
+
+    expect(result.action).toBe('merged');
+    expect(result.survivorId).toBe('high-conf');
+    expect(result.evictedId).toBe('low-conf');
+  });
+
+  it('accepts a custom store backend', async () => {
+    const sameVec = [0.1, 0.2, 0.3, 0.4, 0.5];
+    const embedder = async (_text: string) => sameVec;
+
+    // Minimal custom store
+    const entries = new Map<string, MemoryEntry>();
+    const embeddings = new Map<string, number[]>();
+    const hashes = new Map<string, string>();
+
+    const customStore = {
+      add: (e: MemoryEntry, emb: number[], hash: string) => {
+        entries.set(e.id, e);
+        embeddings.set(e.id, emb);
+        hashes.set(hash, e.id);
+      },
+      get: (id: string) => entries.get(id) ?? null,
+      remove: (id: string) => {
+        entries.delete(id);
+        embeddings.delete(id);
+      },
+      all: () => Array.from(entries.values()),
+      getEmbedding: (id: string) => embeddings.get(id) ?? null,
+      getHash: (hash: string) => hashes.get(hash) ?? null,
+      size: () => entries.size,
+      clear: () => { entries.clear(); embeddings.clear(); hashes.clear(); },
+    };
+
+    const dedup = createDeduplicator({ embedder, store: customStore });
+    await dedup.add(entry('s1', 'custom store test'));
+
+    expect(dedup.size()).toBe(1);
+    expect(entries.has('s1')).toBe(true);
+  });
 });

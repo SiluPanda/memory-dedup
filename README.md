@@ -176,6 +176,7 @@ Factory function that creates a new deduplicator instance. The `embedder` option
 | `exactThreshold` | `number` | `0.98` | Cosine similarity threshold for exact duplicates |
 | `relatedThreshold` | `number` | `0.75` | Cosine similarity threshold for related entries |
 | `mergePolicy` | `string \| function` | `'keep-newest'` | How to handle detected duplicates (see Merge Policies) |
+| `store` | `StoreBackend` | `InMemoryStore` | Custom storage backend (see Custom Store Backend) |
 
 ```typescript
 import { createDeduplicator } from 'memory-dedup';
@@ -435,6 +436,7 @@ interface DedupOptions {
     | 'keep-highest-confidence'
     | 'merge'
     | ((a: MemoryEntry, b: MemoryEntry, sim: number) => MemoryEntry);
+  store?: StoreBackend;          // default: InMemoryStore
 }
 ```
 

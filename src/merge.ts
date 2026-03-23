@@ -75,7 +75,15 @@ export function applyMergePolicy(
     case 'keep-highest-confidence': {
       const candConf = getConfidence(candidate);
       const matchConf = getConfidence(match);
-      if (candConf >= matchConf) {
+      if (candConf !== matchConf) {
+        return candConf > matchConf
+          ? { survivor: candidate, evicted: match }
+          : { survivor: match, evicted: candidate };
+      }
+      // Fallback: keep-newest when confidence is equal
+      const candTs = getTimestamp(candidate);
+      const matchTs = getTimestamp(match);
+      if (candTs >= matchTs) {
         return { survivor: candidate, evicted: match };
       }
       return { survivor: match, evicted: candidate };
@@ -84,11 +92,11 @@ export function applyMergePolicy(
     case 'merge': {
       const longer = candidate.content.length >= match.content.length ? candidate : match;
       const merged: MemoryEntry = {
-        id: match.id,
+        id: candidate.id,
         content: longer.content,
         metadata: mergeMetadata(candidate.metadata, match.metadata),
       };
-      return { survivor: merged, evicted: candidate };
+      return { survivor: merged, evicted: match };
     }
   }
 }

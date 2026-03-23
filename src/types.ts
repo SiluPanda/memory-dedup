@@ -23,6 +23,7 @@ export interface DedupOptions {
     | 'keep-highest-confidence'
     | 'merge'
     | ((a: MemoryEntry, b: MemoryEntry, sim: number) => MemoryEntry);
+  store?: StoreBackend;
 }
 
 export interface DedupResult {
